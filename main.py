@@ -4,9 +4,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import smtplib
 
-EXCEL_FILE = "temp.xlsx"
-SENDER_EMAIL = "YOUR_EMAIL_HERE"
-SENDER_PASSWORD = "YOUR_APP_PASSWORD_HERE"  # app password of gmail
+EXCEL_FILE = "directory of the xlsx file"
+SENDER_EMAIL = "sender's mail"
+SENDER_PASSWORD = "app password"  # app password of gmail
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 DELAY_BETWEEN_EMAILS = 1.5  # delay to prevent block by gmail for too frequently sent mails
@@ -32,7 +32,7 @@ try:
             msg = MIMEMultipart()
             msg["From"] = SENDER_EMAIL
             msg["To"] = recipient_mail
-            msg["Subject"] = f"Your Subject Here for {recipient_name}"
+            msg["Subject"] = f"Sponsorship message for {recipient_name}"
 
             body = f"""Dear {recipient_name},
 
@@ -46,11 +46,11 @@ GDGoC Bilkent
             # send mail via checking errors for per recipient
             try:
                 server.sendmail(SENDER_EMAIL, recipient_mail, msg.as_string())
-                print(f"[{index+1}/{len(df)}] [SENT] {recipient_name} → {recipient_mail}")
+                print(f"[{index + 1}/{len(df)}] [SENT] {recipient_name} → {recipient_mail}")
             except smtplib.SMTPException as e:
                 print(f"[{index+1}/{len(df)}] [FAILED] Could not send to {recipient_mail}: {e}")
 
-            time.sleep(DELAY_BETWEEN_EMAILS)
+            time.sleep(DELAY_BETWEEN_EMAILS) # wait to send the next mail
 
 except smtplib.SMTPAuthenticationError: #wrong log in credentials
     print("\n[AUTH ERROR] Could not log in. Verify your 2FA and Gmail App Password.")
