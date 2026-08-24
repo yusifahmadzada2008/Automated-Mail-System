@@ -1,21 +1,40 @@
-import pandas as pd
-import time
-import random
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import os
+import random
 import smtplib
+import time
+import pandas as pd
 
 EXCEL_FILE = "path of the file"
 SENDER_EMAIL = "email of sender"
-SENDER_PASSWORD = "app password"  # app password of gmail
+SENDER_PASSWORD = "app password"  # App password for Gmail or standard password for Bilkent
+REPLY_TO_EMAIL = "reply to email"  # Club email where replies should land
+
+# SMTP Server Options (toggle as needed)
 SMTP_SERVER = "smtp.gmail.com"
+# SMTP_SERVER = "asmtp.bilkent.edu.tr"
 SMTP_PORT = 587
+
+DAILY_SESSION_LIMIT = 25  # Recommended cap per day
+
+
+def safe_save_excel(dataframe: pd.DataFrame, file_path: str):
+    # saves DataFrame to an atomic temp file first, preventing file corruption on abrupt Ctrl+C
+    temp_path = f"{file_path}.tmp"
+    try:
+        dataframe.to_excel(temp_path, index=False)
+        os.replace(temp_path, file_path)
+    except Exception as save_err:
+        print(f"[SAVE ERROR] Could not save directly: {save_err}")
+        dataframe.to_excel(file_path, index=False)
+
 
 # load the excel file
 df = pd.read_excel(EXCEL_FILE)
 
-# ensure the status and date columns exist if not create
+# ensure status and date columns exist
 if "Status" not in df.columns:
     df["Status"] = ""
 if "Date" not in df.columns:
@@ -24,7 +43,6 @@ if "Date" not in df.columns:
 df["Status"] = df["Status"].astype(object)
 df["Date"] = df["Date"].astype(object)
 
-# counter to control the delay time
 emails_sent_this_session = 0
 
 try:
@@ -34,7 +52,13 @@ try:
         print("Connection to SMTP server is successful.\n")
 
         for index, row in df.iterrows():
-            # only sent emails without SENT status
+            if emails_sent_this_session >= DAILY_SESSION_LIMIT:
+                print(
+                    f"\n[SESSION COMPLETE] Reached daily limit of"
+                    f" {DAILY_SESSION_LIMIT} emails."
+                )
+                break
+
             status = str(row.get("Status", "")).strip().upper()
             if status == "SENT":
                 continue
@@ -45,76 +69,94 @@ try:
             website = str(row.get("Official Website", "")).strip()
             recipient_mail = str(row.get("Official Email", "")).strip()
 
-            # choose random subject to improve uniquity
+            # basic email validation
+            if (
+                not recipient_mail
+                or "@" not in recipient_mail
+                or str(recipient_mail).lower() == "nan"
+            ):
+                print(
+                    f"[{index + 1}/{len(df)}] [SKIPPED] Invalid email: '{recipient_mail}'"
+                )
+                df.at[index, "Status"] = "INVALID"
+                safe_save_excel(df, EXCEL_FILE)
+                continue
+
+            # subject variations
             SUBJECT_TEMPLATES = [
                 f"Partnership with GDGoC Bilkent | {organization_name}",
-                f"GDGoC Bilkent & {organization_name} — Collaboration Opportunity",
+                (
+                    f"GDGoC Bilkent & {organization_name} — Collaboration"
+                    " Opportunity"
+                ),
                 f"Connecting with {organization_name} ({location})",
             ]
             selected_subject = random.choice(SUBJECT_TEMPLATES)
 
-
-            # check if file or a valid mail exists
-            if not recipient_mail or "@" not in recipient_mail or str(recipient_mail).lower() == "nan":
-                # mark invalid emails
-                print(f"[{index + 1}/{len(df)}] [SKIPPED] Invalid email: '{recipient_mail}'")
-                df.at[index, "Status"] = "INVALID"
-                df.to_excel(EXCEL_FILE, index=False)
-                continue
-
-            # create the message
+            # email body
             body = (
                 f"Hi {organization_name} Team,\n\n"
                 f"I hope you're having a great week in {location}.\n\n"
-                f"I'm reaching out from Google Developer Groups on Campus (GDGoC) at Bilkent University. "
-                f"We have been following {organization_name}'s impactful work as a leading {org_type.lower()} "
-                f"via {website} and would love to explore a sponsorship partnership for our upcoming hackathons and technical workshops.\n\n"
-                f"Best regards,\n"
-                f"GDGoC Bilkent"
+                "I'm reaching out from Google Developer Groups on Campus"
+                " (GDGoC) at Bilkent University. We have been following"
+                f" {organization_name}'s impactful work as a leading"
+                f" {org_type.lower()} via {website} and would love to explore a"
+                " sponsorship partnership for our upcoming hackathons and"
+                " technical workshops.\n\n"
+                "Best regards,\n"
+                "GDGoC Bilkent"
             )
 
+            # construct message
             msg = MIMEMultipart()
             msg["From"] = SENDER_EMAIL
             msg["To"] = recipient_mail
+            msg["Reply-To"] = REPLY_TO_EMAIL
             msg["Subject"] = selected_subject
             msg.attach(MIMEText(body, "plain"))
 
-            # send mail via checking errors for per recipient
+            # send the message
             try:
                 server.sendmail(SENDER_EMAIL, recipient_mail, msg.as_string())
-                print(f"[{index + 1}/{len(df)}] [SENT] {organization_name} → {recipient_mail}")
-
-                # update Status and Date Columns, and the counter of the session
+                print(
+                    f"[{index + 1}/{len(df)}] [SENT] {organization_name} →"
+                    f" {recipient_mail}"
+                )
                 df.at[index, "Status"] = "SENT"
-                df.at[index, "Date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                df.at[index, "Date"] = datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
                 emails_sent_this_session += 1
             except smtplib.SMTPException as e:
-                print(f"[{index+1}/{len(df)}] [FAILED] Could not send to {recipient_mail}: {e}")
-
-                # Update Status on failure
+                print(
+                    f"[{index + 1}/{len(df)}] [FAILED] Could not send to"
+                    f" {recipient_mail}: {e}"
+                )
                 df.at[index, "Status"] = "NOT SENT"
-                server.rset() # reset the connection
+                server.rset()
 
-            # save the excel file
-            df.to_excel(EXCEL_FILE, index=False)
+            # safe save to disk
+            safe_save_excel(df, EXCEL_FILE)
 
-            sleep_time = random.uniform(8.0, 15.0)
-            time.sleep(sleep_time)  # wait for a random second to send the next mail
+            # pacing delay between single emails
+            if emails_sent_this_session < DAILY_SESSION_LIMIT:
+                sleep_time = random.uniform(25.0, 60.0)
+                print(
+                    f"Waiting {int(sleep_time)}s... (Progress:"
+                    f" {emails_sent_this_session}/{DAILY_SESSION_LIMIT})"
+                )
+                time.sleep(sleep_time)
 
-            # wait 1 minute every 60 seconds
-            if emails_sent_this_session > 0 and emails_sent_this_session % 20 == 0:
-                print(f"\n--- Batch limit reached ({emails_sent_this_session} sent). Pausing for 60 seconds... ---\n")
-                time.sleep(60)
-# handle mid force stop properly so it will safely continue in the next session
 except KeyboardInterrupt:
-    print("\n\n[USER STOPPED] Run terminated manually.")
+    print("\n\n[USER STOPPED] Execution halted safely.")
     print(
-        f"Successfully saved all {emails_sent_this_session} emails sent during this session."
+        f"Saved all progress. Sent {emails_sent_this_session} emails in this"
+        " session."
     )
-    print("You can resume anytime—already SENT rows will be skipped.")
-except smtplib.SMTPAuthenticationError: #wrong log in credentials
-    print("\n[AUTH ERROR] Could not log in. Verify your 2FA and Gmail App Password.")
+    print("Already SENT rows remain preserved for next time.")
+except smtplib.SMTPAuthenticationError:
+    print("\n[AUTH ERROR] Login failed. Check your email credentials.")
 except Exception as e:
-    print(f"\n[CRITICAL ERROR] Connection failed: {e}")
+    print(f"\n[CRITICAL ERROR] Connection error: {e}")
 
 print("\nProcess finished.")
