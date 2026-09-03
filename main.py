@@ -11,8 +11,8 @@ import pandas as pd
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 EXCEL_FILE = "sample.xlsx"
-SENDER_EMAIL = "email of sender"
-SENDER_PASSWORD = "app password"  # App password for Gmail or standard password for Bilkent
+SENDER_EMAIL = "elvinei@code.edu.az"
+SENDER_PASSWORD = "sldq xgwi bwww iiaw"  # App password for Gmail or standard password for Bilkent
 REPLY_TO_EMAIL = "reply to email"  # Club email where replies should land
 SIGNATURE_LOGO = os.path.join(SCRIPT_DIR, "assets", "gdg-logo.png")
 
@@ -42,8 +42,32 @@ def apply_placeholders(template: str, row: pd.Series) -> str:
     return result
 
 
-def prompt_email_content() -> tuple[str, str]:
-    print(PLACEHOLDER_HINT + "\n")
+def is_valid_email(email: str) -> bool:
+    return bool(email and "@" in email and str(email).lower() != "nan")
+
+
+def prompt_send_mode() -> str:
+    print("Send mode:")
+    print("  1) Bulk send from Excel file")
+    print("  2) Send to individual email")
+    while True:
+        choice = input("Choose mode [1/2]: ").strip()
+        if choice in ("1", "2"):
+            return choice
+        print("Please enter 1 or 2.")
+
+
+def prompt_individual_email() -> str:
+    while True:
+        email = input("Enter recipient email: ").strip()
+        if is_valid_email(email):
+            return email
+        print("Invalid email. Please try again.")
+
+
+def prompt_email_content(*, use_placeholders: bool = True) -> tuple[str, str]:
+    if use_placeholders:
+        print(PLACEHOLDER_HINT + "\n")
 
     subject = input("Enter email subject: ").strip()
     while not subject:
@@ -181,16 +205,63 @@ def build_email_message(
 
 def safe_save_excel(dataframe: pd.DataFrame, file_path: str):
     # saves DataFrame to an atomic temp file first, preventing file corruption on abrupt Ctrl+C
-    temp_path = f"{file_path}.tmp"
+    root, ext = os.path.splitext(file_path)
+    temp_path = f"{root}.tmp{ext or '.xlsx'}"
     try:
         dataframe.to_excel(temp_path, index=False)
         os.replace(temp_path, file_path)
     except Exception as save_err:
         print(f"[SAVE ERROR] Could not save directly: {save_err}")
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
         dataframe.to_excel(file_path, index=False)
 
 
-def run() -> None:
+def ensure_signature_logo() -> None:
+    if not os.path.isfile(SIGNATURE_LOGO):
+        raise FileNotFoundError(
+            f"Signature logo not found at '{SIGNATURE_LOGO}'. "
+            "Ensure assets/gdg-logo.png exists."
+        )
+
+
+def send_email(server: smtplib.SMTP, recipient_mail: str, msg: MIMEMultipart) -> None:
+    server.sendmail(SENDER_EMAIL, recipient_mail, msg.as_string())
+
+
+def run_individual() -> None:
+    ensure_signature_logo()
+
+    recipient_mail = prompt_individual_email()
+    subject, body = prompt_email_content(use_placeholders=False)
+    signature_details = prompt_signature_details()
+    print("\nSending email...\n")
+
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            print("Connection to SMTP server is successful.\n")
+
+            msg = build_email_message(
+                recipient_mail,
+                subject,
+                body,
+                signature_details,
+            )
+            send_email(server, recipient_mail, msg)
+            print(f"[SENT] → {recipient_mail}")
+    except smtplib.SMTPAuthenticationError:
+        print("\n[AUTH ERROR] Login failed. Check your email credentials.")
+    except smtplib.SMTPException as e:
+        print(f"\n[FAILED] Could not send to {recipient_mail}: {e}")
+    except Exception as e:
+        print(f"\n[CRITICAL ERROR] Connection error: {e}")
+
+    print("\nProcess finished.")
+
+
+def run_bulk() -> None:
     df = pd.read_excel(EXCEL_FILE)
 
     if "Status" not in df.columns:
@@ -202,12 +273,7 @@ def run() -> None:
     df["Date"] = df["Date"].astype(object)
 
     emails_sent_this_session = 0
-
-    if not os.path.isfile(SIGNATURE_LOGO):
-        raise FileNotFoundError(
-            f"Signature logo not found at '{SIGNATURE_LOGO}'. "
-            "Ensure assets/gdg-logo.png exists."
-        )
+    ensure_signature_logo()
 
     subject_template, body_template = prompt_email_content()
     signature_details = prompt_signature_details()
@@ -234,11 +300,7 @@ def run() -> None:
                 organization_name = str(row.get("Organization", "")).strip()
                 recipient_mail = str(row.get("Official Email", "")).strip()
 
-                if (
-                    not recipient_mail
-                    or "@" not in recipient_mail
-                    or str(recipient_mail).lower() == "nan"
-                ):
+                if not is_valid_email(recipient_mail):
                     print(
                         f"[{index + 1}/{len(df)}] [SKIPPED] Invalid email:"
                         f" '{recipient_mail}'"
@@ -257,7 +319,7 @@ def run() -> None:
                 )
 
                 try:
-                    server.sendmail(SENDER_EMAIL, recipient_mail, msg.as_string())
+                    send_email(server, recipient_mail, msg)
                     print(
                         f"[{index + 1}/{len(df)}] [SENT] {organization_name} →"
                         f" {recipient_mail}"
@@ -298,6 +360,13 @@ def run() -> None:
         print(f"\n[CRITICAL ERROR] Connection error: {e}")
 
     print("\nProcess finished.")
+
+
+def run() -> None:
+    if prompt_send_mode() == "2":
+        run_individual()
+    else:
+        run_bulk()
 
 
 if __name__ == "__main__":
