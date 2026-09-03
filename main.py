@@ -11,14 +11,14 @@ import pandas as pd
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 EXCEL_FILE = "sample.xlsx"
-SENDER_EMAIL = "elvinei@code.edu.az"
-SENDER_PASSWORD = "sldq xgwi bwww iiaw"  # App password for Gmail or standard password for Bilkent
-REPLY_TO_EMAIL = "reply to email"  # Club email where replies should land
+SENDER_EMAIL = "yusif.ahmadzada@ug.bilkent.edu.tr"
+SENDER_PASSWORD = "Xnb67803"  # App password for Gmail or standard password for Bilkent
+REPLY_TO_EMAIL = "www.cool.2024@gmail.com"  # Club email where replies should land
 SIGNATURE_LOGO = os.path.join(SCRIPT_DIR, "assets", "gdg-logo.png")
 
 # SMTP Server Options (toggle as needed)
-SMTP_SERVER = "smtp.gmail.com"
-# SMTP_SERVER = "asmtp.bilkent.edu.tr"
+# SMTP_SERVER = "smtp.gmail.com"
+SMTP_SERVER = "asmtp.bilkent.edu.tr"
 SMTP_PORT = 587
 
 DAILY_SESSION_LIMIT = 25  # Recommended cap per day
@@ -27,6 +27,15 @@ PLACEHOLDER_HINT = (
     "Available placeholders: {organization_name}, {org_type}, {location},"
     " {website}"
 )
+
+# Fixed signature details matching the template
+SIGNATURE_DATA = {
+    "name": "Bayim Abbaszade",
+    "role": "Partnership Team Lead",
+    "phone": "+ 90 501 554 43 21",
+    "email": "gdgoc.bilkent@gmail.com",
+    "chapter": "Bilkent University",
+}
 
 
 def apply_placeholders(template: str, row: pd.Series) -> str:
@@ -73,94 +82,92 @@ def prompt_email_content(*, use_placeholders: bool = True) -> tuple[str, str]:
     while not subject:
         subject = input("Subject cannot be empty. Enter email subject: ").strip()
 
-    print("\nEnter email body (press Enter on an empty line when finished):")
+    print("\nEnter or paste your email body below.")
+    print("Type 'DONE' on a new line and press Enter when finished:\n")
+
     body_lines = []
     while True:
-        line = input()
-        if not line:
+        try:
+            line = input()
+        except EOFError:
+            break
+        if line.strip().upper() == "DONE":
             break
         body_lines.append(line)
 
-    body = "\n".join(body_lines)
-    while not body.strip():
-        print("Body cannot be empty. Enter email body:")
+    body = "\n".join(body_lines).strip()
+    while not body:
+        print("\n[!] Body cannot be empty. Enter email body (type 'DONE' on a new line when finished):")
         body_lines = []
         while True:
-            line = input()
-            if not line:
+            try:
+                line = input()
+            except EOFError:
+                break
+            if line.strip().upper() == "DONE":
                 break
             body_lines.append(line)
-        body = "\n".join(body_lines)
+        body = "\n".join(body_lines).strip()
 
     return subject, body
 
 
-def prompt_signature_details() -> dict[str, str]:
-    print("\n--- GDG Campus email signature ---")
-    defaults = {
-        "name": "Your name",
-        "title": "Title at Company",
-        "subheading": "Subheading text here",
-        "phone": "111.111.1111",
-        "website": "editableurl.com",
-        "campus_name": "GDGoC Bilkent",
-    }
-    signature = {}
-    for key, default in defaults.items():
-        label = key.replace("_", " ").title()
-        value = input(f"{label} [{default}]: ").strip()
-        signature[key] = value or default
-    return signature
+def confirm_dispatch(subject: str, target_summary: str) -> bool:
+    print("\n" + "=" * 50)
+    print("FINAL DISPATCH CONFIRMATION")
+    print("=" * 50)
+    print(f"Target: {target_summary}")
+    print(f"Subject: {subject}")
+    print("Signature: Attached automatically at bottom")
+    print("=" * 50)
+
+    while True:
+        choice = input("Send out emails now? (y/n): ").strip().lower()
+        if choice in ("yes", "y"):
+            return True
+        if choice in ("no", "n"):
+            print("\n[ABORTED] Operation canceled. No emails were sent.")
+            return False
+        print("Invalid choice. Please enter 'y' or 'n'.")
 
 
-def build_plain_signature(signature: dict[str, str]) -> str:
-    website = signature["website"]
-    if not website.startswith(("http://", "https://")):
-        website = f"https://{website}"
-
+def build_plain_signature() -> str:
     return (
-        f"{signature['name']}\n"
-        f"{signature['title']}\n"
-        f"{signature['subheading']}\n"
-        f"P {signature['phone']}\n"
-        f"{website}\n\n"
+        f"\n\n--\n"
+        f"{SIGNATURE_DATA['name']}\n"
+        f"{SIGNATURE_DATA['role']}\n"
+        f"{SIGNATURE_DATA['phone']}\n"
+        f"{SIGNATURE_DATA['email']}\n\n"
         f"Google Developer Group\n"
-        f"{signature['campus_name']}"
+        f"{SIGNATURE_DATA['chapter']}"
     )
 
 
-def build_html_signature(signature: dict[str, str]) -> str:
-    website = signature["website"]
-    website_href = (
-        website if website.startswith(("http://", "https://")) else f"https://{website}"
-    )
-
+def build_html_signature() -> str:
     return f"""
-<table cellpadding="0" cellspacing="0" style="margin-top:24px;font-family:Arial,sans-serif;">
+<table cellpadding="0" cellspacing="0" style="margin-top:28px;font-family:Arial,sans-serif;color:#202124;">
   <tr>
     <td style="padding:0;">
-      <div style="font-size:14px;font-weight:700;color:#3c4043;">{html.escape(signature["name"])}</div>
-      <div style="font-size:12px;color:#80868b;margin-top:2px;">{html.escape(signature["title"])}</div>
-      <div style="font-size:12px;color:#80868b;margin-top:2px;">{html.escape(signature["subheading"])}</div>
-      <div style="font-size:12px;margin-top:8px;">
-        <span style="color:#4285f4;font-weight:700;">P</span>
-        <span style="color:#80868b;"> {html.escape(signature["phone"])}</span>
+      <div style="font-size:15px;font-weight:700;color:#202124;">{html.escape(SIGNATURE_DATA["name"])}</div>
+      <div style="font-size:13px;color:#5f6368;margin-top:3px;">{html.escape(SIGNATURE_DATA["role"])}</div>
+      <div style="font-size:13px;margin-top:6px;">
+        <span style="color:#1a73e8;font-weight:600;">{html.escape(SIGNATURE_DATA["phone"])}</span>
       </div>
-      <div style="font-size:12px;margin-top:2px;">
-        <a href="{html.escape(website_href, quote=True)}" style="color:#4285f4;text-decoration:none;">
-          {html.escape(website)}
+      <div style="font-size:13px;margin-top:2px;">
+        <a href="mailto:{html.escape(SIGNATURE_DATA['email'])}" style="color:#1a73e8;text-decoration:none;font-weight:600;">
+          {html.escape(SIGNATURE_DATA["email"])}
         </a>
       </div>
       <table cellpadding="0" cellspacing="0" style="margin-top:16px;">
         <tr>
-          <td style="padding:0;vertical-align:middle;">
-            <img src="cid:gdg_logo" alt="Google Developer Group" width="320"
-                 style="display:block;max-width:320px;height:auto;" />
+          <td style="padding:4px;background-color:#ffffff;border-radius:4px;display:inline-block;vertical-align:middle;">
+            <img src="cid:gdg_logo" alt="Google Developer Group" width="260"
+                 style="display:block;max-width:260px;height:auto;" />
           </td>
         </tr>
         <tr>
-          <td style="padding-top:6px;font-size:13px;font-weight:600;color:#4285f4;">
-            {html.escape(signature["campus_name"])}
+          <td style="padding-top:4px;font-size:13px;font-weight:600;color:#1a73e8;">
+            {html.escape(SIGNATURE_DATA["chapter"])}
           </td>
         </tr>
       </table>
@@ -170,24 +177,26 @@ def build_html_signature(signature: dict[str, str]) -> str:
 """.strip()
 
 
-def build_email_message(
-    recipient_mail: str,
-    subject: str,
-    body: str,
-    signature: dict[str, str],
-) -> MIMEMultipart:
-    plain_body = f"{body}\n\n--\n{build_plain_signature(signature)}"
+from email.utils import formataddr, formatdate, make_msgid
+
+
+def build_email_message(recipient_mail: str, subject: str, body: str) -> MIMEMultipart:
+    plain_body = f"{body}{build_plain_signature()}"
     html_body = (
         f"<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#202124;"
-        f"white-space:pre-wrap;\">{html.escape(body)}</div>"
-        f"{build_html_signature(signature)}"
+        f"white-space:pre-wrap;line-height:1.5;\">{html.escape(body)}</div>"
+        f"{build_html_signature()}"
     )
 
     msg = MIMEMultipart("related")
-    msg["From"] = SENDER_EMAIL
+
+    msg["From"] = formataddr(("Bayim Abbaszade", SENDER_EMAIL))
     msg["To"] = recipient_mail
     msg["Reply-To"] = REPLY_TO_EMAIL
     msg["Subject"] = subject
+
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain="ug.bilkent.edu.tr")
 
     alternative = MIMEMultipart("alternative")
     alternative.attach(MIMEText(plain_body, "plain", "utf-8"))
@@ -202,9 +211,7 @@ def build_email_message(
 
     return msg
 
-
 def safe_save_excel(dataframe: pd.DataFrame, file_path: str):
-    # saves DataFrame to an atomic temp file first, preventing file corruption on abrupt Ctrl+C
     root, ext = os.path.splitext(file_path)
     temp_path = f"{root}.tmp{ext or '.xlsx'}"
     try:
@@ -234,7 +241,10 @@ def run_individual() -> None:
 
     recipient_mail = prompt_individual_email()
     subject, body = prompt_email_content(use_placeholders=False)
-    signature_details = prompt_signature_details()
+
+    if not confirm_dispatch(subject, f"Individual -> {recipient_mail}"):
+        return
+
     print("\nSending email...\n")
 
     try:
@@ -243,12 +253,7 @@ def run_individual() -> None:
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
             print("Connection to SMTP server is successful.\n")
 
-            msg = build_email_message(
-                recipient_mail,
-                subject,
-                body,
-                signature_details,
-            )
+            msg = build_email_message(recipient_mail, subject, body)
             send_email(server, recipient_mail, msg)
             print(f"[SENT] → {recipient_mail}")
     except smtplib.SMTPAuthenticationError:
@@ -272,12 +277,20 @@ def run_bulk() -> None:
     df["Status"] = df["Status"].astype(object)
     df["Date"] = df["Date"].astype(object)
 
-    emails_sent_this_session = 0
+    pending_count = len(df[df["Status"].astype(str).str.strip().str.upper() != "SENT"])
     ensure_signature_logo()
 
     subject_template, body_template = prompt_email_content()
-    signature_details = prompt_signature_details()
+
+    target_info = (
+        f"Bulk Send ({min(pending_count, DAILY_SESSION_LIMIT)} queue limit "
+        f"out of {pending_count} pending entries in '{EXCEL_FILE}')"
+    )
+    if not confirm_dispatch(subject_template, target_info):
+        return
+
     print("\nStarting email dispatch...\n")
+    emails_sent_this_session = 0
 
     try:
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
@@ -311,12 +324,7 @@ def run_bulk() -> None:
 
                 selected_subject = apply_placeholders(subject_template, row)
                 body = apply_placeholders(body_template, row)
-                msg = build_email_message(
-                    recipient_mail,
-                    selected_subject,
-                    body,
-                    signature_details,
-                )
+                msg = build_email_message(recipient_mail, selected_subject, body)
 
                 try:
                     send_email(server, recipient_mail, msg)
