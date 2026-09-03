@@ -11,9 +11,9 @@ import pandas as pd
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 EXCEL_FILE = "sample.xlsx"
-SENDER_EMAIL = "yusif.ahmadzada@ug.bilkent.edu.tr"
-SENDER_PASSWORD = "Xnb67803"  # App password for Gmail or standard password for Bilkent
-REPLY_TO_EMAIL = "www.cool.2024@gmail.com"  # Club email where replies should land
+SENDER_EMAIL = "email of sender"
+SENDER_PASSWORD = "password"  # App password for Gmail or standard password for Bilkent
+REPLY_TO_EMAIL = "reply to email"  # Club email where replies should land
 SIGNATURE_LOGO = os.path.join(SCRIPT_DIR, "assets", "gdg-logo.png")
 
 # SMTP Server Options (toggle as needed)
