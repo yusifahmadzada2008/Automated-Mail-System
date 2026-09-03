@@ -1,0 +1,19 @@
+# PyCharm files
+.idea/
+*.iws
+*.iml
+
+# Spyder files
+.spyderproject/
+.spyproject/
+
+# Python virtual environments & bytecode
+.venv/
+venv/
+ENV/
+__pycache__/
+*.pyc
+
+# Local data & temp files
+*.tmp.xlsx
+sample.tmp.xlsx
