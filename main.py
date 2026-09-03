@@ -7,7 +7,7 @@ import smtplib
 import time
 import pandas as pd
 
-EXCEL_FILE = "path of the file"
+EXCEL_FILE = "sample.xlsx"
 SENDER_EMAIL = "email of sender"
 SENDER_PASSWORD = "app password"  # App password for Gmail or standard password for Bilkent
 REPLY_TO_EMAIL = "reply to email"  # Club email where replies should land
@@ -18,6 +18,53 @@ SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
 DAILY_SESSION_LIMIT = 25  # Recommended cap per day
+
+PLACEHOLDER_HINT = (
+    "Available placeholders: {organization_name}, {org_type}, {location},"
+    " {website}"
+)
+
+
+def apply_placeholders(template: str, row: pd.Series) -> str:
+    values = {
+        "organization_name": str(row.get("Organization", "")).strip(),
+        "org_type": str(row.get("Type", "")).strip(),
+        "location": str(row.get("Head Office Location", "")).strip(),
+        "website": str(row.get("Official Website", "")).strip(),
+    }
+    result = template
+    for key, value in values.items():
+        result = result.replace("{" + key + "}", value)
+    return result
+
+
+def prompt_email_content() -> tuple[str, str]:
+    print(PLACEHOLDER_HINT + "\n")
+
+    subject = input("Enter email subject: ").strip()
+    while not subject:
+        subject = input("Subject cannot be empty. Enter email subject: ").strip()
+
+    print("\nEnter email body (press Enter on an empty line when finished):")
+    body_lines = []
+    while True:
+        line = input()
+        if not line:
+            break
+        body_lines.append(line)
+
+    body = "\n".join(body_lines)
+    while not body.strip():
+        print("Body cannot be empty. Enter email body:")
+        body_lines = []
+        while True:
+            line = input()
+            if not line:
+                break
+            body_lines.append(line)
+        body = "\n".join(body_lines)
+
+    return subject, body
 
 
 def safe_save_excel(dataframe: pd.DataFrame, file_path: str):
@@ -44,6 +91,8 @@ df["Status"] = df["Status"].astype(object)
 df["Date"] = df["Date"].astype(object)
 
 emails_sent_this_session = 0
+subject_template, body_template = prompt_email_content()
+print("\nStarting email dispatch...\n")
 
 try:
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
@@ -64,9 +113,6 @@ try:
                 continue
 
             organization_name = str(row.get("Organization", "")).strip()
-            org_type = str(row.get("Type", "")).strip()
-            location = str(row.get("Head Office Location", "")).strip()
-            website = str(row.get("Official Website", "")).strip()
             recipient_mail = str(row.get("Official Email", "")).strip()
 
             # basic email validation
@@ -82,30 +128,8 @@ try:
                 safe_save_excel(df, EXCEL_FILE)
                 continue
 
-            # subject variations
-            SUBJECT_TEMPLATES = [
-                f"Partnership with GDGoC Bilkent | {organization_name}",
-                (
-                    f"GDGoC Bilkent & {organization_name} — Collaboration"
-                    " Opportunity"
-                ),
-                f"Connecting with {organization_name} ({location})",
-            ]
-            selected_subject = random.choice(SUBJECT_TEMPLATES)
-
-            # email body
-            body = (
-                f"Hi {organization_name} Team,\n\n"
-                f"I hope you're having a great week in {location}.\n\n"
-                "I'm reaching out from Google Developer Groups on Campus"
-                " (GDGoC) at Bilkent University. We have been following"
-                f" {organization_name}'s impactful work as a leading"
-                f" {org_type.lower()} via {website} and would love to explore a"
-                " sponsorship partnership for our upcoming hackathons and"
-                " technical workshops.\n\n"
-                "Best regards,\n"
-                "GDGoC Bilkent"
-            )
+            selected_subject = apply_placeholders(subject_template, row)
+            body = apply_placeholders(body_template, row)
 
             # construct message
             msg = MIMEMultipart()
